@@ -18,10 +18,8 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
 
 COPY ./_docker/app/php.ini /usr/local/etc/php/conf.d/php.ini
 
-# Install composer
+COPY --from=composer:2.11.2 /usr/bin/composer /usr/local/bin/composer
+
 ENV COMPOSER_ALLOW_SUPERUSER=1
-RUN curl -sS https://getcomposer.org/installer | php -- \
-        --filename=composer \
-        --install-dir=/usr/local/bin
 
 WORKDIR /var/www
