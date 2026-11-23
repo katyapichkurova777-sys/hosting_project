@@ -1,0 +1,111 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to REG.RU
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://hostingproject.ru/
+
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_PRIVATE_KEY: ${{ secrets.DEPLOY_PRIVATE_KEY }}
+      DEPLOY_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
+          tar -czf build.tar.gz -C public build
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 15 -H "$DEPLOY_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload frontend assets
+        shell: bash
+        env:
+          REMOTE_ARCHIVE: storage/app/deploy-build-${{ github.run_id }}.tar.gz
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            build.tar.gz \
+            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/$REMOTE_ARCHIVE"
+
+      - name: Deploy application
+        shell: bash
+        env:
+          REMOTE_ARCHIVE: storage/app/deploy-build-${{ github.run_id }}.tar.gz
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "bash -s -- '$DEPLOY_PATH' '$REMOTE_ARCHIVE' '$DEPLOY_SHA'" <<'DEPLOY_SCRIPT'
+          set -Eeuo pipefail
+
+          deploy_path="$1"
+          archive_path="$2"
+          deploy_sha="$3"
+
+          cd "$deploy_path"
+
+          restore_application() {
+              rm -f "$archive_path"
+              php artisan up || true
+          }
+
+          trap restore_application EXIT
+
+          php artisan down --retry=60 || true
+          test "$(git branch --show-current)" = 'master'
+          git fetch origin master
+          git merge-base --is-ancestor "$deploy_sha" origin/master
+          git merge --ff-only "$deploy_sha"
+          test "$(git rev-parse HEAD)" = "$deploy_sha"
+          composer install \
+              --no-dev \
+              --no-interaction \
+              --no-progress \
+              --prefer-dist \
+              --optimize-autoloader
+          tar -xzf "$archive_path" -C public
+          php artisan migrate --force
+          php artisan optimize
+          DEPLOY_SCRIPT
+
+      - name: Verify production
+        run: curl --fail --location --retry 5 --retry-delay 5 https://hostingproject.ru/
