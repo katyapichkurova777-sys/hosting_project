@@ -85,17 +85,19 @@ jobs:
           deploy_path="$1"
           archive_path="$2"
           deploy_sha="$3"
+          php_binary='/opt/php/8.5/bin/php'
 
           cd "$deploy_path"
+          test -x "$php_binary"
 
           restore_application() {
               rm -f "$archive_path"
-              php artisan up || true
+              "$php_binary" artisan up || true
           }
 
           trap restore_application EXIT
 
-          php artisan down --retry=60 || true
+          "$php_binary" artisan down --retry=60 || true
           test "$(git branch --show-current)" = 'master'
           if ! git diff --quiet || ! git diff --cached --quiet; then
               git stash push --message "pre-deploy-$deploy_sha"
@@ -106,15 +108,15 @@ jobs:
           git merge --ff-only "$deploy_sha"
           test "$(git rev-parse HEAD)" = "$deploy_sha"
           test -f "$HOME/bin/composer"
-          php "$HOME/bin/composer" install \
+          "$php_binary" "$HOME/bin/composer" install \
               --no-dev \
               --no-interaction \
               --no-progress \
               --prefer-dist \
               --optimize-autoloader
           tar -xzf "$archive_path" -C public
-          php artisan migrate --force
-          php artisan optimize
+          "$php_binary" artisan migrate --force
+          "$php_binary" artisan optimize
           DEPLOY_SCRIPT
 
       - name: Verify production
