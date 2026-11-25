@@ -97,6 +97,7 @@ jobs:
 
           php artisan down --retry=60 || true
           test "$(git branch --show-current)" = 'master'
+          git remote set-url origin https://github.com/katyapichkurova777-sys/hosting_project.git
           git fetch origin master
           git merge-base --is-ancestor "$deploy_sha" origin/master
           git merge --ff-only "$deploy_sha"
