@@ -105,7 +105,8 @@ jobs:
           git merge-base --is-ancestor "$deploy_sha" origin/master
           git merge --ff-only "$deploy_sha"
           test "$(git rev-parse HEAD)" = "$deploy_sha"
-          composer install \
+          test -f "$HOME/bin/composer"
+          php "$HOME/bin/composer" install \
               --no-dev \
               --no-interaction \
               --no-progress \
