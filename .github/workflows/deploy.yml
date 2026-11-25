@@ -97,6 +97,9 @@ jobs:
 
           php artisan down --retry=60 || true
           test "$(git branch --show-current)" = 'master'
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+              git stash push --message "pre-deploy-$deploy_sha"
+          fi
           git remote set-url origin https://github.com/katyapichkurova777-sys/hosting_project.git
           git fetch origin master
           git merge-base --is-ancestor "$deploy_sha" origin/master
