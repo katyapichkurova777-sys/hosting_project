@@ -62,6 +62,10 @@ jobs:
         env:
           REMOTE_ARCHIVE: storage/app/deploy-build-${{ github.run_id }}.tar.gz
         run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p -- '$DEPLOY_PATH/storage/app'"
           scp -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
             build.tar.gz \
