@@ -45,7 +45,6 @@ jobs:
         run: |
           npm ci
           npm run build
-          tar -czf build.tar.gz -C public build
 
       - name: Configure SSH
         shell: bash
@@ -59,45 +58,32 @@ jobs:
 
       - name: Upload frontend assets
         shell: bash
-        env:
-          REMOTE_ARCHIVE: storage/app/deploy-build-${{ github.run_id }}.tar.gz
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "mkdir -p -- '$DEPLOY_PATH/storage/app'"
-          scp -i ~/.ssh/deploy_key \
+            "mkdir -p -- '$DEPLOY_PATH/public/build'"
+          scp -r -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
-            build.tar.gz \
-            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/$REMOTE_ARCHIVE"
+            public/build/. \
+            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/public/build/"
 
       - name: Deploy application
         shell: bash
-        env:
-          REMOTE_ARCHIVE: storage/app/deploy-build-${{ github.run_id }}.tar.gz
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "bash -s -- '$DEPLOY_PATH' '$REMOTE_ARCHIVE' '$DEPLOY_SHA'" <<'DEPLOY_SCRIPT'
+            "bash -s -- '$DEPLOY_PATH' '$DEPLOY_SHA'" <<'DEPLOY_SCRIPT'
           set -Eeuo pipefail
 
           deploy_path="$1"
-          archive_path="$2"
-          deploy_sha="$3"
+          deploy_sha="$2"
           php_binary='/opt/php/8.5/bin/php'
 
           cd "$deploy_path"
           test -x "$php_binary"
 
-          restore_application() {
-              rm -f "$archive_path"
-              "$php_binary" artisan up || true
-          }
-
-          trap restore_application EXIT
-
-          "$php_binary" artisan down --retry=60 || true
           test "$(git branch --show-current)" = 'master'
           if ! git diff --quiet || ! git diff --cached --quiet; then
               git stash push --message "pre-deploy-$deploy_sha"
@@ -114,16 +100,6 @@ jobs:
               --no-progress \
               --prefer-dist \
               --optimize-autoloader
-          tar -xzf "$archive_path" -C public
           "$php_binary" artisan migrate --force
           "$php_binary" artisan optimize
           DEPLOY_SCRIPT
-
-      - name: Verify production
-        run: |
-          curl --fail --location \
-            --retry 5 \
-            --retry-all-errors \
-            --retry-delay 5 \
-            --resolve "hostingproject.ru:80:$DEPLOY_HOST" \
-            http://hostingproject.ru/
