@@ -62,11 +62,15 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "mkdir -p -- '$DEPLOY_PATH/public/build'"
+            "mkdir -p -- '$DEPLOY_PATH/public/build' '$DEPLOY_PATH/build'"
           scp -r -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
             public/build/. \
             "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/public/build/"
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cp -a -- '$DEPLOY_PATH/public/build/.' '$DEPLOY_PATH/build/'"
 
       - name: Deploy application
         shell: bash
